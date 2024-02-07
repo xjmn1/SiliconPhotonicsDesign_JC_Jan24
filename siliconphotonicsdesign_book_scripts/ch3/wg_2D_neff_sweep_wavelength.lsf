@@ -2,7 +2,7 @@
 # by Lukas Chrostowski
 
 # draw waveguide
-wg_2D;  
+#wg_2D;  
 
 # solve for the modes of the waveguide
 run; mesh;

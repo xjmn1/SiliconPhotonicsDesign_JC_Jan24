@@ -1,10 +1,10 @@
 # wg_2D_mode_profile.lsf - calculate the mode profiles of the waveguide
 
-wg_2D;   # run the script to draw the waveguide and set up the simulation
+#wg_2D;   # run the script to draw the waveguide and set up the simulation
 
 # output filename
 clad = substring(material_Clad, 1, (findstring(material_Clad,' '))-1);
-system("mkdir -p out");
+#system("mkdir -p out");
 ?FILE = "out/wl" + num2str(wavelength*1e9) +"nm_" + clad + "-clad" + 
         "_"+ num2str(thick_Si*1e9) + "nm-wg_" + num2str(thick_Slab*1e9)+"nm-ridge";
 
@@ -35,5 +35,5 @@ for (m=1:modes) {          # extract mode data
 	setplot("title","mode" + num2str(m) + "("+pol+"): "+"neff:" + num2str(neff(m)));      
 	image(y,z,W1);	# plot energy density of mode
 	setplot("title","mode" + num2str(m) + "("+pol+"): "+"neff:" + num2str(neff(m)));      
-#	matlabsave ( FILE + "_"+ num2str(m) );
+	matlabsave ( FILE + "_"+ num2str(m) );
 }

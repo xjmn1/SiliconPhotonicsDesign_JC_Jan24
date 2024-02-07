@@ -1,6 +1,6 @@
 # wg_2D.lsf - set up the mode profile simulation solver
 
-wg_2D_draw;   # run script to draw the waveguide
+#wg_2D_draw;   # run script to draw the waveguide
 
 # define simulation parameters
 wavelength    = 1.55e-6;   
