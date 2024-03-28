@@ -1,0 +1,420 @@
+# wg_2D_ng_convergence.lsf
+
+# How do we know when our simulations are correct?  This can partly be answered by determining how much error is present in our simulations, by doing convergence tests.  This is described in section 3.2.4 of the textbook.  In the book, convergence tests are shown for 1D simulations for the effective index of the waveguide.  Here, we perform 2D simulations, and show the convergence tests for the group index. As we will see later, the group index is the most important parameter of the waveguide for the design of the interferometer.
+
+# What parameters are important to sweep?  
+# 1) mesh grid size
+# 2) position of the simulation region, and the mesh points, with respect to the waveguide.
+# 3) simulation span
+
+# The final answer is provided at the end.
+
+newmode; newmode; redrawoff;
+
+######################################################################################################## 
+# Simulation setup
+
+# define simulation parameters
+wavelength    = 1.55e-6;   
+meshsize      = 10e-9;       # maximum mesh size
+modeNum       = 2;           # modes to solve for
+					# find the 2nd mode (TM)
+
+# define simulation region
+width_margin  = 2.0e-6;	 # space to include on the side of the waveguide
+height_margin = 0.5e-6;  # space to include above and below the waveguide
+
+# define wafer and waveguide structure
+thick_Clad = 2.0e-6; 
+thick_Si   = 0.22e-6;
+thick_BOX  = 2.0e-6;
+width_ridge = 0.5e-6;            # width of the waveguide
+
+# define materials
+material_Clad = "SiO2 (Glass) - Const";
+material_BOX  = "SiO2 (Glass) - Const";
+material_Si   = "Si (Silicon) - Dispersive & Lossless";
+materials;     # run script to add materials
+
+
+# calculate simulation volume
+# propagation in the x-axis direction; z-axis is wafer-normal
+Xmin = -2e-6;  Xmax = 2e-6; # length of the waveguide
+Zmin = -height_margin;  Zmax = thick_Si + height_margin;
+Y_span = 2*width_margin + width_ridge; Ymin = -Y_span/2;  Ymax = -Ymin;
+
+# draw cladding
+addrect; set("name","Clad");  set("material", material_Clad);
+set("y", 0);              set("y span", Y_span+1e-6);
+set("z min", 0);          set("z max", thick_Clad);
+set("x min", Xmin);       set("x max", Xmax);
+set("override mesh order from material database",1);
+set("mesh order",3);  # similar to "send to back", put the cladding as a background.
+set("alpha", 0.05);
+
+# draw buried oxide
+addrect; set("name", "BOX"); set("material", material_BOX);
+set("x min", Xmin);       set("x max", Xmax);
+set("z min", -thick_BOX); set("z max", 0);
+set("y", 0);              set("y span", Y_span+1e-6);
+set("alpha", 0.05);
+
+# draw silicon wafer
+addrect; set("name", "Wafer"); set("material", material_Si);
+set("x min", Xmin);       set("x max", Xmax);
+set("z max", -thick_BOX); set("z min", -thick_BOX-2e-6);
+set("y", 0);              set("y span", Y_span+1e-6);
+set("alpha", 0.1);
+
+# draw waveguide
+addrect; set("name", "waveguide"); set("material",material_Si);
+set("y", 0);        set("y span", width_ridge);
+set("z min", 0);    set("z max", thick_Si);
+set("x min", Xmin); set("x max", Xmax);
+
+
+# add 2D mode solver (waveguide cross-section)
+addfde;  set("solver type", "2D X normal");
+set("x", 0);  
+set("y", 0);         set("y span", Y_span);
+set("z max", Zmax);  set("z min", Zmin);
+set("wavelength", wavelength);   set("solver type","2D X normal");
+set("define y mesh by","maximum mesh step"); set("dy", meshsize);
+set("define z mesh by","maximum mesh step"); set("dz", meshsize);
+set("number of trial modes",modeNum);
+
+
+########################################################################################################
+# Convergence tests:
+######################################################################################################## 
+
+NUM=11;  # 11, number of points in the sweeps.
+
+
+######################################################################################################## 
+# FDE mesh size convergence tests – Sweep from 1 to 20 nm in the Z and Y directions, separately.  
+
+# sweep Z mesh
+
+select('FDE');
+?sweep = linspace (20e-9, 1e-9, NUM); 
+ng_sweep = matrix(length(sweep));
+for ( i = 1:length(sweep) ) {
+	switchtolayout;
+	select('FDE');
+	# set('dy',sweep(i));
+	set('dz',sweep(i));  # sweep in the thickness direction
+	
+	run; mesh;
+	setanalysis('wavelength',wavelength);
+	findmodes; selectmode(modeNum);  
+	setanalysis("track selected mode",1);
+	setanalysis("number of test modes",1);
+	setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+	setanalysis('stop wavelength',wavelength);
+	setanalysis("number of points",1);
+	frequencysweep;    # perform sweep of wavelength and plot
+	ng=c/getdata("frequencysweep","vg");
+	?'ng = ' + num2str(ng);
+	ng_sweep(i) = ng;
+}
+plot(sweep*1e9,ng_sweep,'z meshsize [nm]','ng', 'ng versus meshsize');
+plot(sweep*1e9,abs(ng_sweep-ng_sweep(length(ng_sweep))),'z meshsize [nm]','error in ng', 'error in ng versus meshsize','log10y');
+switchtolayout; select('FDE');
+set('dy',meshsize); set('dz',meshsize);  # Return to original value
+
+# sweep Y mesh
+
+select('FDE');
+?sweep = linspace (20e-9, 1e-9, NUM); 
+ng_sweep = matrix(length(sweep));
+for ( i = 1:length(sweep) ) {
+	switchtolayout;
+	select('FDE');
+	set('dy',sweep(i)); # sweep in the width direction
+	# set('dz',sweep(i));  
+	
+	run; mesh;
+	setanalysis('wavelength',wavelength);
+	findmodes; selectmode(modeNum);  
+	setanalysis("track selected mode",1);
+	setanalysis("number of test modes",1);
+	setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+	setanalysis('stop wavelength',wavelength);
+	setanalysis("number of points",1);
+	frequencysweep;    # perform sweep of wavelength and plot
+	ng=c/getdata("frequencysweep","vg");
+	?'ng = ' + num2str(ng);
+	ng_sweep(i) = ng;
+}
+plot(sweep*1e9,ng_sweep,'y meshsize [nm]','ng', 'ng versus meshsize');
+plot(sweep*1e9,abs(ng_sweep-ng_sweep(length(ng_sweep))),'y meshsize [nm]','error in ng', 'error in ng versus meshsize','log10y');
+switchtolayout; select('FDE');
+set('dy',meshsize); set('dz',meshsize);  # Return to original value
+
+
+# sweep Z mesh – with mesh overrides
+
+# add two mesh overrides.  These are span=0.  As long as the mesh dz is smaller than the global mesh, 
+#   this will force the mesh to line up at the mesh override.
+addmesh; set("z",thick_Si);
+addmesh; set("z",0);
+select("mesh"); # select both
+set("override x mesh",0);
+set("override y mesh",0);
+set("override z mesh",1); 
+set("z span",0);
+
+# Sweep Z meshsize, but only points where mesh lines up with the boundary of waveguide.
+?sweep = thick_Si/[10, 11, 12, 13, 14, 15, 16, 20, 25, 30, 40, 60, 100, 150, 220];
+ng_sweep = matrix(length(sweep));
+run; mesh;
+for ( i = 1:length(sweep) ) {
+	switchtolayout;
+	select('FDE');
+	set('dy',20e-9);
+	set('dz',sweep(i));  # sweep in the thickness direction
+
+	select("mesh"); 
+	set("dz",sweep(i)*0.9);  # The mesh override has to be smaller than the global mesh, 
+									 # in order for the mesh to get snapped at the specified location.
+
+	run; mesh;
+
+	z=getdata('FDE::data::material','z');  # mesh
+	if ( z(find(z,thick_Si))==thick_Si ) {
+	  ?'Mesh size: ' + num2str(sweep(i)*1e9) + ' nm, i = ' + num2str(i);
+	} else
+	{
+	  ?"Warning: mesh does not line up with the top of the waveguide";
+	}
+	setanalysis('wavelength',wavelength);
+	findmodes; selectmode(modeNum);  
+	setanalysis("track selected mode",1);
+	setanalysis("number of test modes",1);
+	setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+	setanalysis('stop wavelength',wavelength);
+	setanalysis("number of points",1);
+	frequencysweep;    # perform sweep of wavelength and plot
+	ng=c/getdata("frequencysweep","vg");
+	?'ng = ' + num2str(ng);
+	ng_sweep(i) = ng;
+}
+plot(sweep*1e9,ng_sweep,'z meshsize [nm]','ng', 'ng versus meshsize');
+err=abs(ng_sweep-ng_sweep(length(ng_sweep)));
+plot(sweep*1e9,err,'z meshsize [nm]','error in ng', 'error in ng versus meshsize','loglog');
+
+switchtolayout; select('FDE');
+set('dy',meshsize); set('dz',meshsize);  # Return to original value
+select('mesh'); delete;
+
+
+# sweep Y mesh – with mesh overrides
+
+# add two mesh overrides.  These are span=0.  As long as the mesh dz is smaller than the global mesh, 
+#   this will force the mesh to line up at the mesh override.
+addmesh; set("y",width_ridge/2);
+addmesh; set("y",-width_ridge/2);
+select("mesh"); # select both
+set("override x mesh",0);
+set("override y mesh",1);
+set("override z mesh",0); 
+set("y span",0);
+
+# Sweep Y meshsize, but only points where mesh lines up with the boundary of waveguide.
+select('FDE');
+?sweep = width_ridge/[10, 11, 12, 13, 14, 15, 16, 20, 25, 30, 40, 60, 100, 200, 500];
+ng_sweep = matrix(length(sweep));
+run; mesh;
+for ( i = 1:length(sweep) ) {
+	switchtolayout;
+	select('FDE');
+	set('dz',20e-9);
+	set('dy',sweep(i));  # sweep in the width direction
+
+	select("mesh"); 
+	set("dy",sweep(i)*0.9);  # The mesh override has to be smaller than the global mesh, 
+									 # in order for the mesh to get snapped at the specified location.
+
+	run; mesh;
+
+	y=getdata('FDE::data::material','y');  # mesh
+	if ( y(find(y,width_ridge/2))==width_ridge/2 ) {
+	  ?'Mesh size: ' + num2str(sweep(i)*1e9) + ' nm, i = ' + num2str(i);
+	} else
+	{
+	  ?"Warning: mesh does not line up with the top of the waveguide";
+	}
+	setanalysis('wavelength',wavelength);
+	findmodes; selectmode(modeNum);  
+	setanalysis("track selected mode",1);
+	setanalysis("number of test modes",1);
+	setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+	setanalysis('stop wavelength',wavelength);
+	setanalysis("number of points",1);
+	frequencysweep;    # perform sweep of wavelength and plot
+	ng=c/getdata("frequencysweep","vg");
+	?'ng = ' + num2str(ng);
+	ng_sweep(i) = ng;
+}
+plot(sweep*1e9,ng_sweep,'y meshsize [nm]','ng', 'ng versus meshsize');
+err=abs(ng_sweep-ng_sweep(length(ng_sweep)));
+plot(sweep*1e9,err,'y meshsize [nm]','error in ng', 'error in ng versus meshsize','loglog');
+
+switchtolayout; select('FDE');
+set('dy',meshsize); set('dz',meshsize);  # Return to original value
+select('mesh'); delete;
+
+
+######################################################################################################## 
+# FDE position convergence tests:
+# moving simulation in the Z direction
+
+select('FDE');
+sweep = get('y') + linspace (0,meshsize, NUM);
+ng_sweep = matrix(length(sweep));
+for ( i = 1:length(sweep) ) {
+	switchtolayout;
+	select('FDE');
+	set('y',sweep(i));
+	
+	run; mesh;
+	setanalysis('wavelength',wavelength);
+	findmodes; selectmode(modeNum);  
+	setanalysis("track selected mode",1);
+	setanalysis("number of test modes",1);
+	setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+	setanalysis('stop wavelength',wavelength);
+	setanalysis("number of points",1);
+	frequencysweep;    # perform sweep of wavelength and plot
+	ng=c/getdata("frequencysweep","vg");
+	?'ng = ' + num2str(ng);
+	ng_sweep(i) = ng;
+}
+plot(sweep*1e9,ng_sweep,'y [nm]','ng', 'ng versus y');
+switchtolayout; select('FDE'); 
+set('y',sweep(1)); # Return to original value
+
+
+# FDE position convergence tests:
+# moving simulation in the Z direction
+
+select('FDE');
+sweep = get('z') + linspace (0,meshsize, NUM);
+ng_sweep = matrix(length(sweep));
+for ( i = 1:length(sweep) ) {
+	switchtolayout;
+	select('FDE');
+	set('z',sweep(i));
+	
+	run; mesh;
+	setanalysis('wavelength',wavelength);
+	findmodes; selectmode(modeNum);  
+	setanalysis("track selected mode",1);
+	setanalysis("number of test modes",1);
+	setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+	setanalysis('stop wavelength',wavelength);
+	setanalysis("number of points",1);
+	frequencysweep;    # perform sweep of wavelength and plot
+	ng=c/getdata("frequencysweep","vg");
+	?'ng = ' + num2str(ng);
+	ng_sweep(i) = ng;
+}
+plot(sweep*1e9,ng_sweep,'z [nm]','ng', 'ng versus z');
+switchtolayout; select('FDE'); 
+set('z',sweep(1)); # Return to original value
+
+
+
+######################################################################################################## 
+# Z-Span convergence tests:
+
+select('FDE');
+sweep = get('z span') + linspace (0,3e-6, NUM);
+ng_sweep = matrix(length(sweep));
+E_top_sweep = matrix(length(sweep));
+for ( i = 1:length(sweep) ) {
+	switchtolayout;
+	select('FDE');
+	set('z span',sweep(i));
+	
+	run; mesh;
+	setanalysis('wavelength',wavelength);
+	findmodes; selectmode(modeNum);  
+	setanalysis("track selected mode",1);
+	setanalysis("number of test modes",1);
+	setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+	setanalysis('stop wavelength',wavelength);
+	setanalysis("number of points",1);
+	frequencysweep;    # perform sweep of wavelength and plot
+	ng=c/getdata("frequencysweep","vg");
+	?'ng = ' + num2str(ng);
+	ng_sweep(i) = ng;
+	
+	# field at the top of the simulation:
+	mon="FDE::data::mode"+num2str(modeNum);
+	E1 = pinch(getelectric(mon));
+	y=getdata(mon,'y');
+	z=getdata(mon,'z');  # thickness axis
+	E_max = max(max(E1));
+	E_top_sweep(i) = max (pinch (E1, 2, length(z)) ) / E_max;  # max field at the top of simulation boundary
+}
+plot(sweep*1e6,ng_sweep,'z-span [microns]','ng', 'ng versus z-span');
+plot(sweep*1e6,abs(ng_sweep-ng_sweep(length(ng_sweep))),'z-span [microns]','error in ng', 'error in ng versus z-span','log10y');
+plot(sweep*1e6,E_top_sweep,'z-span [microns]','E-intensity at top of simulation', 'E-field at top versus z-span','log10y');
+
+plot(E_top_sweep(1:length(sweep)-2),abs(ng_sweep(1:length(sweep)-2)-ng_sweep(length(ng_sweep))), 'E-field at boundary','Group Index error','ng error vs. E-field','loglog');
+
+
+
+
+
+########################################################################################################
+########################################################################################################
+# Conclusion – the final answer, within 0.01 error in ng:
+
+switchtolayout;
+dz=5e-9;
+dy=20e-9;
+
+# add two mesh overrides.  
+addmesh; set("y",width_ridge/2);
+addmesh; set("y",-width_ridge/2);
+select("mesh"); # select both
+set('name','meshy');
+select("meshy"); # select both
+set("override x mesh",0);
+set("override y mesh",1);
+set("override z mesh",0); 
+set("y span",0); set('dy',dy*0.9);  # The mesh override has to be smaller than the global mesh, 
+										 		# in order for the mesh to get snapped at the specified location.
+
+# add two mesh overrides. 
+addmesh; set("z",thick_Si);
+addmesh; set("z",0);
+select("mesh"); # select both
+set('name','meshz');
+select("meshz"); # select both
+set("override x mesh",0);
+set("override y mesh",0);
+set("override z mesh",1); 
+set("z span",0); set('dz',dz*0.9);
+
+select('FDE');
+set('dz',dz);
+set('dy',dy);
+set('z span',2.5e-6);
+
+run; mesh;
+setanalysis('wavelength',wavelength);
+findmodes; selectmode(modeNum);  
+setanalysis("track selected mode",1);
+setanalysis("number of test modes",1);
+setanalysis("detailed dispersion calculation",1);  # This feature is useful for higher-order dispersion.
+setanalysis('stop wavelength',wavelength);
+setanalysis("number of points",1);
+frequencysweep;    # perform sweep of wavelength and plot
+ng=c/getdata("frequencysweep","vg");
+?'Final answer, ng = ' + num2str(ng);
+
+
