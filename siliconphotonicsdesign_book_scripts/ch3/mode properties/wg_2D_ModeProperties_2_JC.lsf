@@ -1,0 +1,135 @@
+# wg_2D_ModeProperties.lsf
+
+# Calculate some waveguide properties:
+# 
+# - Effective Mode Area
+# - Optical confinement factor (based on energy density)
+# - Optical confinement factor (based on E-field intensity)
+
+
+# wg_2D_draw;   # run script to draw the waveguide
+
+# define simulation parameters
+wavelength    = 1.55e-6;   
+meshsize      = 10e-9;       # maximum mesh size
+modeNum       = 1;           # modes to solve for
+
+# add 2D mode solver (waveguide cross-section)
+# addfde;  set("solver type", "2D X normal");
+# set("x", 0);  
+# set("y", 0);         set("y span", Y_span);
+# set("z max", Zmax);  set("z min", Zmin);
+# set("wavelength", wavelength);   set("solver type","2D X normal");
+# set("define y mesh by","maximum mesh step"); set("dy", meshsize);
+# set("define z mesh by","maximum mesh step"); set("dz", meshsize);
+# set("number of trial modes",modeNum);
+
+
+
+##########################################################################################
+# Effective mode area
+#  modified from http://docs.lumerical.com/en/layout_analysis_effective_mode_area.html
+#  modified by Lukas Chrostowski, 2015, for MODE Solutions.
+
+switchtolayout;
+run; mesh;
+setanalysis('wavelength',wavelength+1e-9);
+
+m = "FDE::data::material";
+f1 = getdata(m,"f");
+eps1 = pinch(getdata(m,"index_z"))^2;  # Assume material is isotropic
+y = getdata(m,"y");
+x = getdata(m,"x");
+
+setanalysis('wavelength',wavelength-1e-9);
+run; mesh;
+f3 = getdata(m,"f");
+eps3 = pinch(getdata(m,"index_z"))^2;  # Assume material is isotropic
+
+findmodes; selectmode(modeNum);  
+m = "FDE::data::mode"+num2str(modeNum);
+H2 = pinch(getmagnetic(m));
+E2 = pinch(getelectric(m));
+
+re_depsdw = real((f3*eps3-f1*eps1)/(f3-f1));
+W = 0.5*(re_depsdw*eps0*E2+mu0*H2);
+
+modalarea1 = integrate(W,1:2,x,y)/max(W);
+
+?"Effective mode area: " +num2str(modalarea1*1e12)+" um^2";
+
+
+##########################################################################################
+# Calculate confinement factor, based on energy density
+#  modified from http://docs.lumerical.com/en/layout_analysis_effective_mode_area.html
+#  lukas chrostowski, 2015
+#  kyle murray, 2014
+
+# core region definition
+xmin = -width_ridge/2;
+ymin = 0;
+xmax = width_ridge/2;
+xmax = thick_Si;
+
+# Normalize to unit integral
+W = W/integrate(W,1:2,x,y);
+
+# Zero E-field outside of waveguide core
+Wc = W;
+x_index_min = find(x,xmin);
+x_index_max = find(x,xmax);
+y_index_min = find(y,ymin);
+y_index_max = find(y,ymax);
+Wc(1:length(x),1:y_index_min) = 0;
+Wc(1:length(x),y_index_max:length(y)) = 0;
+Wc(1:x_index_min,1:length(y)) = 0;
+Wc(x_index_max:length(x),1:length(y)) = 0;
+
+confinement = integrate(Wc,1:2,x,y);
+
+?"Confinement factor (Energy density): " +num2str(confinement); 
+
+# Plot total energy density and confined profiles
+image(x*1e9,y*1e9,W/max(W),'x [nm]','y [nm]','W');
+image(x*1e9,y*1e9,Wc/max(W),'x [nm]','y [nm]','W core');
+
+
+##########################################################################################
+# Calculate confinement factor, based on E-Field intensity (typically in a laser)
+#  modified from http://docs.lumerical.com/en/layout_analysis_effective_mode_area.html
+#  lukas chrostowski, 2011, 2015
+#  kyle murray, 2014
+
+# core region definition
+xmin = -width_ridge/2;
+ymin = 0;
+xmax = width_ridge/2;
+ymax = thick_Si;
+
+# Get squared electric field profile
+m = "FDE::data::mode"+num2str(modeNum);
+E2 = pinch(getelectric(m));
+# Normalize to unit integral
+m = "FDE::data::material";
+y = getdata(m,"y");
+x = getdata(m,"x");
+E2 = E2/integrate(E2,1:2,x,y);
+
+# Zero E-field outside of waveguide core
+EC2 = E2;
+x_index_min = find(x,xmin);
+x_index_max = find(x,xmax);
+y_index_min = find(y,ymin);
+y_index_max = find(y,ymax);
+EC2(1:length(x),1:y_index_min) = 0;
+EC2(1:length(x),y_index_max:length(y)) = 0;
+EC2(1:x_index_min,1:length(y)) = 0;
+EC2(x_index_max:length(x),1:length(y)) = 0;
+
+confinement = integrate(EC2,1:2,x,y);
+?"Confinement factor (E-Field intensity): " +num2str(confinement); 
+
+# Plot total E-field intensity and confined intensity profiles
+image(x*1e9,y*1e9,E2/max(E2),'x [nm]','y [nm]','E-field intensity');
+image(x*1e9,y*1e9,EC2/max(E2),'x [nm]','y [nm]','E-field intensity inside core');
+
