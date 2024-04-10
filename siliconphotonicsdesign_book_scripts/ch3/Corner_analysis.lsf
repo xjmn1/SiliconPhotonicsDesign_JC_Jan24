@@ -1,0 +1,41 @@
+# Corner_analysis.lsf
+
+# Corner analysis for strip waveguide with Si thickness and width variations
+
+nominal_th = 220e-9; # nominal Si thickness
+nominal_width = 500e-9; # nominal Si width
+
+range_th = [215.3, 223.1]*1e-9;
+range_width = [470, 510]*1e-9;
+
+switchtolayout;
+    
+setnamed('Si','x span',nominal_width);
+setnamed('Si','y span',nominal_th);
+
+wg_2D_neff_sweep_wavelength_corneranalysis_JC;
+
+nominal_ng = ng;
+
+corners_ng = matrix(length(range_th),length(range_width));
+
+for (ii=1:length(range_th))
+{
+    for (jj=1:length(range_width))
+    {
+        switchtolayout;
+    
+        setnamed('Si','x span',range_width(jj));
+        setnamed('Si','y span',range_th(ii));
+        
+        wg_2D_neff_sweep_wavelength_corneranalysis_JC;
+        
+        corners_ng(ii,jj) = ng;
+        
+    }
+    
+}
+        
+
+
+
